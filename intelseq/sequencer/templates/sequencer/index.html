@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8" /> {% load static %}
+	<!-- Bootstrap css -->
+	<link rel="stylesheet" type="text/css" href="{% static 'sequencer/css/bootstrap.min.css' %}" />
+
+	<!-- Our css -->
+	<link rel="stylesheet" type="text/css" href="{% static 'sequencer/css/custom.css' %}" />
+
+	<title>etsuko.io</title>
+
+
+
+</head>
+
+<body>
+
+
+	<div class="jumbotron text-left">
+		<h1>Intelligent Music Sequencer</h1>
+		<div id="description">
+			<p>
+				<h4>This app allows you to generate short loops of music. Instructions:</h4>
+			</p>
+			<ul>
+				<li>
+					<h5>Click randomize to generate a sequence (shortkey: r)</h5>
+				</li>
+				<li>
+					<h5>Click play to play the result (shortkey: p)</h5>
+				</li>
+				<li>
+					<h5>Click stop to stop playing (shortkey: s)</h5>
+				</li>
+				</li>
+			</ul>
+		</div>
+	</div>
+	<div class="row">
+		<div class="col-md-4">
+			<!-- left column -->
+
+			<div class="variables">
+				<h5>Variables:</h5>
+				<ul>
+					<li>Base velocity</li>
+					<input type="range" min="1" max="64" value="20" id="velocityRangeSlider">
+					<li>accent intensity</li>
+					<input type="range" min="0" max="63" value="50" id="accentSlider">
+					<li>chord</li>
+					<select class="scale-selector" id="scale-selector">
+						<option value="minor">minor</option>
+						<option value="major">major</option>
+						<option value="pentatonic">pentatonic</option>
+						<option value="major9">major9</option>
+						<option value="minor7">minor7</option>
+						<option value="whole">whole</option>
+					</select>
+
+					<li>tempo</li>
+					<input type="range" min="50" max="150" value="90" id="tempoSlider">
+
+					<li>MIDI ouptut</li>
+					<select id="midi-dropdown-list">
+						<option>digitakt</option>
+					</select>
+					
+				</ul>
+			</div>
+		</div>
+
+		<div class="col-md-8 right-column">
+			<!-- right column -->
+			<div class="music-app" id="music-app-sequencer">
+				<div class="accent-row" id="accents"></div>
+			</div>
+			<div class="container music-app-controls">
+				<div class="btn-group-sm">
+					<button type="button" class="btn btn-primary" id="clearAllButton">clear all</button>
+					<button type="button" class="btn btn-primary" id="randomizeButton">randomize</button>
+					<button type="button" class="btn btn-success" onclick="like()">Great!</button>
+					<button type="button" class="btn btn-warning" onclick="">Mwah</button>
+					<button type="button" class="btn btn-danger" onclick="dislike()">Nope.</button>
+
+				</div>
+			</div>
+			<div class="debug" id="testSpace"></div>
+			<div class="debug" id="play-counter"></div>
+
+			<div id="myModal" class="modal fade" role="dialog">
+				<div class="modal-dialog">
+
+					<!-- Modal content-->
+					<div id="rating-modal-content" class="modal-content">
+						<div class="modal-header float-left">
+							<button type="button" class="close float-left" data-dismiss="modal">&times;</button>
+							<h4 class="modal-title">Rating</h4>
+						</div>
+						<div class="modal-body">
+							<p>
+								<i>Rate the result to finetune your taste profile</i>
+							</p>
+						</div>
+						<div class="modal-footer">
+							<button type="button" class="btn btn-success" onclick="like()">like</button>
+							<button type="button" class="btn btn-danger" onclick="dislike()">dislike</button>
+						</div>
+					</div>
+
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<!-- jQuery -->
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+
+
+
+	<!-- Bootstrap js -->
+	<script src="{% static 'sequencer/js/bootstrap.min.js' %}"></script>
+
+	<!-- WebMidi.js -->
+	<script src="https://cdn.jsdelivr.net/npm/webmidi@2.0.0"></script>
+
+	<!-- HTML5 web audio package: Tone.js -->
+	<script type="text/javascript" src="{% static 'sequencer/js/Tone.min.js' %}"></script>
+
+	<!-- sequencer functionality is scripted in sequencer-tone.js, called from here  -->
+	<script type="text/javascript" src="{% static 'sequencer/js/sequencer-tone.js' %}"></script>
+
+	<!-- MIDI-notes.js is only still used in noteNumberToName(); would be nice to do with Tone.js instead -->
+	<script type="text/javascript" src="{% static 'sequencer/js/MIDI-notes.js' %}"></script>
+
+	<script type="text/javascript" src="{% static 'sequencer/js/shortcuts.js' %}"></script>
+
+
+
+	<script>
+		//initial global variables
+		var gridColumns = 8;
+		var gridRows = 4;
+		var sequencers = [];
+
+		var playCounter = 0;
+		var maxPlays = 4;
+
+		var currentRepetition;
+		var currentChord;
+
+		var possibleOctaves = ["C0", "C1", "C2", "C3", "C4", "C5"];
+		var currentOctave = possibleOctaves[3];
+
+		//user-editable variables
+		var minVel = 75;
+		var accentStrength = 10;
+		var maxVel = minVel + accentStrength;
+		var accents = [];
+
+
+		var midiOutput;
+		var sequencer;
+
+		WebMidi.enable(function (err) {
+			if (err) {
+				console.log("WebMidi could not be enabled.", err);
+			} else {
+				console.log("WebMidi enabled!");
+				//console.log(WebMidi.inputs[0]);
+				//console.log(WebMidi.outputs[0]);
+				
+				try{
+					midiOutput = WebMidi.outputs[0];
+					console.log("auto selected midi output:");
+					console.log(midiOutput.name);
+				} catch(err) {
+					console.log("Error - No MIDI output available");
+				}
+
+				sequencer = new Sequencer(gridColumns, gridRows, notes, velocities, bpm, midiOutput);
+
+				var outputElements = [];
+				var midiOutputHtmlElements = "";
+				console.log("Available MIDI outputs:");
+				for (let entry of WebMidi.outputs) {
+					outputElements.push(entry.name);
+					midiOutputHtmlElements += "<option value="+entry.name+">"+entry.name+"</option>";
+					console.log(entry.name);
+
+				}
+				var midiDropdownList = document.getElementById("midi-dropdown-list");
+				midiDropdownList.innerHTML = midiOutputHtmlElements;
+
+				midiDropdownList.addEventListener("input", function (e){ 
+					sequencer.midiOutput = WebMidi.getOutputByName(e.target.value);
+					console.log("selected value:"+e.target.value);
+					console.log("matching out port:");
+					console.log(WebMidi.getOutputByName(e.target.name));
+;				});
+
+
+				//var midiOutputElement = new OptionList(outputElements)
+				//console.log(midiOutput);
+			}
+		});
+
+		for (var i = 0; i < gridColumns; i++) {
+			accents[i] = 0;
+		}
+
+		var velocities = accentsToVelocities(accents, minVel, maxVel);
+
+		//patterns: 2-dimensional array, referred to as 'matrix' in this document
+		var patterns = []; //this is connected to the grid
+
+		var bpm = 90;
+
+		var notes = [];
+
+		var minor = [0, 2, 3, 5, 7, 8, 10];
+		var major = [0, 2, 4, 5, 7, 9, 11];
+		var pentatonic = [0, 3, 5, 7, 10];
+		var dorian = [0, 2, 3, 5, 7, 9, 10];
+		var phrygian = [0, 1, 3, 5, 7, 8, 10];
+		var lydian = [0, 2, 4, 6, 7, 9, 11];
+		var mixolydian = [0, 2, 4, 5, 7, 9, 10];
+
+		var major9 = [0, 2, 4, 7, 11];
+		var minor7 = [0, 3, 7, 10];
+		var whole = [0, 2, 4, 6, 8, 10];
+
+		var firstChord = [0, 2, 4];
+		var secondChord = [1, 3, 5];
+		var thirdChord = [2, 4, 6];
+		var noChord = [0, 1, 2, 3, 4, 5, 6];
+
+		var chordList = ["minor", "major", "pentatonic", "major9", "minor7", "whole"];
+
+
+
+		/********************\
+		 *  INITIALIZE GRID *|
+		 ********************/
+
+		for (var i = 0; i < gridRows; i++) {
+			patterns[i] = [];
+			for (j = 0; j < gridColumns; j++) {
+				patterns[i][j] = 0;
+			}
+		}
+
+		//create 4 rows with <select> menu
+		for (var a = 0; a < gridRows; a++) {
+			createNoteSelector(a);
+			createRowGrid(a);
+		}
+
+		//create buttons in the grid
+
+		for (var i = 0; i < gridColumns; i++) {
+			var newAccentBtn = document.createElement("button");
+			newAccentBtn.setAttribute('id', "accentButton" + i);
+			newAccentBtn.setAttribute('class', 'inactiveAccentButton');
+			newAccentBtn.setAttribute('data-accent-button-index', i);
+			document.getElementById("accents").appendChild(newAccentBtn);
+			document.getElementById("accentButton" + i).addEventListener("click", function (event) {
+				toggleAccentValue(event.target);
+			});
+
+			console.log("creating grid");
+		}
+
+		//creates sequencers
+		document.getElementById("velocityRangeSlider").addEventListener('input', function (event) {
+			updateBaseVelocity(parseInt(event.target.value));
+			debugLive("velocity: " + event.target.value);
+		});
+
+		document.getElementById("accentSlider").addEventListener('input', function (event) {
+			updateAccentStrength(parseInt(event.target.value));
+			debugLive("accent: +" + event.target.value);
+		});
+
+		document.getElementById("tempoSlider").addEventListener('input', function (event) {
+			updateTempo(event.target.value);
+			debugLive("BPM: " + event.target.value);
+		});
+
+		document.getElementById("music-app-sequencer").addEventListener('stepChange', function (event) {
+			//debugLive("stepping up " + event.detail);
+
+			//event.detail = number of current step
+			updateActiveStepView(event.detail);
+			updateActiveAccentView(event.detail);
+		});
+
+		document.getElementById("clearAllButton").addEventListener('click', function () {
+			//set all buttons css to inactive
+			//clear local patterns
+			//update Sequencer patterns
+			debugLive("clear");
+			clearGrid();
+			clearAccents();
+		});
+
+		document.getElementById("randomizeButton").addEventListener('click', function () {
+			moveToNewSequence();
+		});
+
+		document.getElementById("scale-selector").addEventListener('input', function (e) {
+			selectScale(e.target.value, "C4");
+		});
+
+		document.getElementById("music-app-sequencer").addEventListener('reachedMaxPlays', reviewSequence);
+
+		selectScale("minor", currentOctave);
+
+
+		/********************\
+		 *  FUNCTIONALITY   *|
+		 ********************/
+
+		function selectScale(scaleSelection, octave) {
+			var notes = [];
+			var totalNotes = gridRows;
+
+			var octaveAsNoteNumber = Tone.Frequency(octave).toMidi();
+
+			switch (scaleSelection) {
+				case "minor":
+					notes = distributeChord(minor, firstChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "major":
+					notes = distributeChord(major, firstChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "pentatonic":
+					notes = distributeChord(pentatonic, firstChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "major9":
+					notes = distributeChord(major9, noChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "minor7":
+					notes = distributeChord(minor7, noChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "whole":
+					notes = distributeChord(whole, noChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				default:
+					console.log("no match in scale name")
+			}
+			for (var i = 0; i < totalNotes; i++) {
+				document.getElementById("row" + i + "-note-selector").textContent = notes[i];
+			}
+
+		}
+
+		function distributeChord(scaleArray, chordArray, rootNote, numberOfNotes) {
+			//returns an array of note names
+			var notesDistributed = 0;
+			var scaleExtentionCounter = 0;
+			var distributedScaleArray = [];
+			var distributedChordArray = [];
+
+			var extendedChordArray = extendChord(scaleArray, numberOfNotes);
+
+
+			for (var i = 0; i < numberOfNotes; i++) {
+				var noteNumber = extendedChordArray[i] + parseInt(rootNote);
+				var noteName = Tone.Frequency(noteNumber, "midi").toNote();
+				distributedScaleArray.push(noteName);
+				console.log(distributedScaleArray[i]);
+			}
+			return distributedScaleArray;
+		}
+
+		function extendChordList(chordArray, scaleLength, totalItems) {
+			var chordExtentionCounter = 0;
+			var moduloOperator = chordArray.length;
+			var index = 0;
+			var result = [];
+			var operator = 0;
+
+			while (index < totalItems) {
+				operator = Math.floor(index / chordArray.length);
+
+				/* result should be: 
+					var a = chordArray[(index % chordArray.length)] = 2
+					operator increments when index / chordArray.length > 1
+					operator = index / chordArray.length
+
+					result = a + (scaleLength * operator)
+
+					index++;
+
+				*/
+				var a = chordArray[(index % chordArray.length)];
+
+				result.push(a + (scaleLength * operator));
+				chordExtentionCounter++;
+				index++;
+			}
+			return result;
+		}
+
+		function extendChord(chordArray, totalItems) {
+			var result = [];
+			var counter = -1;
+			for (var i = 0; i < totalItems; i++) {
+				if (i % chordArray.length == 0) {
+					counter++;
+				}
+				result[i] = chordArray[i % chordArray.length] + 12 * counter;
+			}
+			return result;
+		}
+		console.log("extended: " + extendChord([0, 7], 12));
+
+		function noteNumberToName(MIDInoteNumber) {
+			//note no 36 = noteFreqs.C2;
+			return noteNumbers[MIDInoteNumber];
+		}
+
+		function returnValues(obj) {
+			return Object.keys(obj).map(function (key) {
+				return obj[key];
+			});
+		}
+
+		function createNoteSelector(rowID) {
+			//<div class="sequencer-row" id="sequencer-row1">
+			var rowDiv = document.createElement("div");
+			rowDiv.setAttribute("class", "sequencer-row");
+			rowDiv.setAttribute("id", "sequencer-row" + rowID);
+
+			var seqRow = document.getElementById("music-app-sequencer").appendChild(rowDiv);
+
+			//<span class="note-selector" id="row1-note-selector">
+			var selectBox = document.createElement("span");
+			selectBox.setAttribute("class", "note-selector");
+			selectBox.setAttribute("id", "row" + rowID + "-note-selector");
+			selectBox.setAttribute("data-index", rowID);
+			selectBox.textContent = "";
+			var selectBoxNode = seqRow.appendChild(selectBox);
+		}
+
+		function createRowGrid(rowID) {
+			//line: <div class="row-buttons" id="row1-buttons"></div>
+			var rowGridDiv = document.createElement("div");
+			rowGridDiv.setAttribute("class", "row-buttons");
+			rowGridDiv.setAttribute("id", "row" + rowID + "-buttons");
+
+			//in which method is sequencer-rowx made? > in the first lines of createNoteSelector
+			var rowGridDivNode = document.getElementById("sequencer-row" + rowID).appendChild(rowGridDiv);
+
+			//create main sequence grid
+			for (var i = 0; i < gridColumns; i++) {
+				var newBtn = document.createElement("button");
+				newBtn.setAttribute('id', "row" + rowID + "-button" + i); //need to update with x/y (i + j coordinate)
+				newBtn.setAttribute('class', 'inactiveButton');
+				newBtn.setAttribute('data-button-index', i);
+				newBtn.setAttribute('data-row-index', rowID);
+				var newBtnNode = rowGridDiv.appendChild(newBtn);
+				newBtnNode.addEventListener("click", function (event) {
+					var r = parseInt(event.target.getAttribute("data-row-index"));
+					var b = parseInt(event.target.getAttribute("data-button-index"));
+
+					if (getMatrixValue(r, b) == 1) {
+						setButtonValue(r, b, 0);
+					} else if (getMatrixValue(r, b) == 0) {
+						setButtonValue(r, b, 1);
+					}
+
+					//toggleValue(event.target);
+
+				});
+			}
+		}
+
+		function getMatrixValue(row, btn) {
+			//expects integer row between 0 and {gridRows}
+			//expects integer btn between 0 and {gridColumns}
+			return patterns[row][btn];
+		}
+
+		function updateBaseVelocity(vel) {
+			minVel = vel;
+			maxVel = minVel + accentStrength;
+			velocities = accentsToVelocities(accents, minVel, maxVel);
+			for (var i = 0; i < gridRows; i++) {
+				sequencer.updateVelocities(velocities);
+			}
+		}
+
+		function updateAccentStrength(n) {
+			accentStrength = n;
+			maxVel = minVel + accentStrength;
+			velocities = accentsToVelocities(accents, minVel, maxVel);
+			for (var i = 0; i < gridRows; i++) {
+				sequencer.updateVelocities(velocities);
+			}
+
+		}
+
+		function accentsToVelocities(accents, minv, maxv) {
+			var newVels = [];
+			for (var i = 0; i < gridColumns; i++) { //should change accents.length into main column length
+				if (accents[i] == 0) newVels[i] = parseInt(minVel);
+				else if (accents[i] == 1) newVels[i] = parseInt(maxVel);
+			}
+			return newVels;
+		}
+
+		function setButtonValue(rowID, buttonIndex, value) {
+			patterns[rowID][buttonIndex] = value;
+			sequencer.updateMatrix(patterns);
+
+			patternHasChanged();
+
+			if (value > 0) {
+				document.getElementById("row" + rowID + "-button" + buttonIndex).className = "activeButton";
+			} else {
+				document.getElementById("row" + rowID + "-button" + buttonIndex).className = "inactiveButton";
+			}
+		}
+
+		function setAccentValue(index, value) {
+			accents[index] = value;
+			velocities = accentsToVelocities(accents, minVel, maxVel);
+			sequencer.updateVelocities(velocities);
+
+			if (value == 0) {
+				document.getElementById("accentButton" + index).className = "inactiveAccentButton";
+			} else {
+				document.getElementById("accentButton" + index).className = "activeAccentButton";
+			}
+		}
+
+		function clearGrid() {
+			//should already work with new version, except setButtonValue
+			console.log("clearing grid");
+			for (var i = 0; i < gridRows; i++) {
+				for (var j = 0; j < gridColumns; j++) {
+					setButtonValue(i, j, 0);
+				}
+			}
+		}
+
+		function clearAccents() {
+			//should already work with new version. not sure if setAccentValue works
+			console.log("clearing accents");
+			for (var i = 0; i < gridColumns; i++) {
+				setAccentValue(i, 0);
+				document.getElementById("accentButton" + i).className = "inactiveAccentButton";
+			}
+		}
+
+		function toggleAccentValue(e) {
+			//should already work with new version
+			//this function should be deleted and replaced with a setAccentValue() function, similar to setButtonValue
+			var currentAccent = e;
+			var i;
+
+			if (currentAccent.className == "inactiveAccentButton") {
+				currentAccent.className = "activeAccentButton";
+				accents[currentAccent.getAttribute("data-accent-button-index")] = 1;
+				velocities = accentsToVelocities(accents, minVel, maxVel);
+				sequencer.updateVelocities(velocities);
+			} else {
+				currentAccent.className = "inactiveAccentButton";
+
+				accents[currentAccent.getAttribute("data-accent-button-index")] = 0;
+				velocities = accentsToVelocities(accents, minVel, maxVel);
+				sequencer.updateVelocities(velocities);
+			}
+		}
+
+		function randomizeGrid() {
+			var totalTiles = gridRows * gridColumns;
+
+			var numTilesToActivate = Math.floor(2 + (Math.random() * (totalTiles / 4)));
+			console.log("tiles to be randomized: " + numTilesToActivate);
+
+			var randomSequence = [];
+
+			for (var i = 0; i < totalTiles; i++) {
+				if (i < numTilesToActivate) {
+					randomSequence[i] = 1;
+				} else {
+					randomSequence[i] = 0;
+				}
+			}
+			shuffle(randomSequence);
+			var k = 0;
+			for (var i = 0; i < gridRows; i++) {
+				for (var j = 0; j < gridColumns; j++) {
+					setButtonValue(i, j, randomSequence[k]);
+					k++;
+				}
+			}
+		}
+
+		function generateRepeatingSequence(repAmount) {
+			var totalTiles = gridRows * repAmount;
+
+			var numTilesToActivate = Math.floor(1 + (Math.random() * (totalTiles / 2)));
+			var randomSequence = [];
+
+			for (var i = 0; i < totalTiles; i++) {
+				if (i < numTilesToActivate) {
+					randomSequence[i] = 1;
+				} else {
+					randomSequence[i] = 0;
+				}
+			}
+
+			shuffle(randomSequence);
+
+			var randomSequenceAs2DArray = [];
+			var k = 0;
+
+			for (var i = 0; i < gridRows; i++) {
+				randomSequenceAs2DArray[i] = [];
+				for (var j = 0; j < repAmount; j++) {
+					randomSequenceAs2DArray[i][j] = randomSequence[k];
+					k++;
+				}
+			}
+
+			var completeSequence = [];
+			//rows: all
+			//columns: not all
+			for (var i = 0; i < gridRows; i++) {
+				completeSequence[i] = [];
+				for (var j = 0; j < gridColumns; j++) {
+					completeSequence[i][j] = randomSequenceAs2DArray[i][j % repAmount];
+				}
+			}
+
+			for (var i = 0; i < gridRows; i++) {
+				for (var j = 0; j < gridColumns; j++) {
+					setButtonValue(i, j, completeSequence[i][j]);
+				}
+			}
+		}
+
+		function randomizeAccents() {
+			var totalAccents = accents.length;
+			var numAccentsToActivate = Math.floor(Math.random() * (totalAccents / 3));
+			var randomSequence = [];
+
+			for (var i = 0; i < totalAccents; i++) {
+				if (i < numAccentsToActivate) {
+					randomSequence[i] = 1;
+				} else {
+					randomSequence[i] = 0;
+				}
+			}
+
+			shuffle(randomSequence);
+
+			for (var i = 0; i < totalAccents; i++) {
+				setAccentValue(i, randomSequence[i]);
+			}
+
+
+		}
+		function randomizeBaseVelocity(min, max) {
+			//normally distributed
+			var result = Math.round(gaussianRand(min, max));
+			document.getElementById("velocityRangeSlider").value = result;
+			updateBaseVelocity(result);
+			return result;
+		}
+
+		function randomizeAccentStrength(min, max) {
+			//normally distributed
+			var result = Math.round(gaussianRand(min, max));
+			document.getElementById("accentSlider").value = result;
+			updateAccentStrength(result);
+			return result;
+		}
+
+
+
+		function randomizeTempo(min, max) {
+			//normally distributed
+			var result = Math.round(gaussianRand(min, max));
+			document.getElementById("tempoSlider").value = result;
+			updateTempo(result);
+			return result;
+		}
+
+		function randomizeChord() {
+			//returns a string
+			var result = chordList[Math.floor(Math.random() * chordList.length)]
+
+			currentChord = result;
+
+			document.getElementById("scale-selector").value = result;
+			selectScale(result, "C3");
+			return result;
+		}
+
+		function gaussianRand(min, max) {
+			var rand = 0;
+
+			for (var i = 0; i < 6; i++) {
+				rand += Math.random();
+			}
+			rand /= 6;
+			rand = rand * (max - min);
+			rand += min;
+			return rand;
+		}
+
+
+		function shuffle(array) {
+			var currentIndex = array.length, temporaryValue, randomIndex;
+
+			// While there remain elements to shuffle...
+			while (0 !== currentIndex) {
+
+				// Pick a remaining element...
+				randomIndex = Math.floor(Math.random() * currentIndex);
+				currentIndex -= 1;
+
+				// And swap it with the current element.
+				temporaryValue = array[currentIndex];
+				array[currentIndex] = array[randomIndex];
+				array[randomIndex] = temporaryValue;
+			}
+
+			return array;
+		}
+
+		function updateActiveStepView(currentStep) {
+			//set tiles according to patterns array
+			console.log("current step: " + currentStep);
+			for (var i = 0; i < gridRows; i++) {
+				for (var j = 0; j < gridColumns; j++) {
+					//inactive current step
+					if (patterns[i][j] == 0) {
+						if (j != currentStep) {
+							document.getElementById("row" + i + "-button" + j).className = "inactiveButton";
+						} else {
+							document.getElementById("row" + i + "-button" + j).className = "inactiveFlashingButton";
+						}
+
+					} else {
+						if (j != currentStep) {
+							document.getElementById("row" + i + "-button" + j).className = "activeButton";
+						} else {
+							document.getElementById("row" + i + "-button" + j).className = "flashingButton";
+						}
+					}
+
+				}
+			}
+		}
+
+		function updateActiveAccentView(currentStep) {
+
+			for (var i = 0; i < accents.length; i++) {
+				if (accents[i] == 1) {
+					if (i == currentStep) {
+						document.getElementById("accentButton" + i).className = "flashingAccentButton";
+					}
+					else {
+						document.getElementById("accentButton" + i).className = "activeAccentButton";
+					}
+				} else {
+					if (i != currentStep) {
+						document.getElementById("accentButton" + i).className = "inactiveAccentButton";
+					} else {
+						document.getElementById("accentButton" + i).className = "inactiveFlashingAccentButton";
+					}
+				}
+			}
+		}
+
+		function updateChord(notes) {
+			if (notes.length != gridRows) {
+				throw "number of chord notes doesn't match with number of rows";
+			}
+			for (var i = 0; i < gridRows; i++) {
+				sequencer.setNote(notes[i], i);
+				document.getElementById("row" + i + "-note-selector").value = notes[i]; // change option dynamically
+			}
+		}
+
+		function updateTempo(newBPM) {
+			bpm = newBPM;
+			sequencer.setBPM(newBPM);
+		}
+
+		function patternHasChanged() {
+			//this function is always called when updateMatrix() is executed.
+			//this also means that updateMatrix() has to be the only way a pattern can change
+		}
+
+		function moveToNewSequence() {
+			randomizeGrid();
+			currentRepetition = Math.ceil(Math.random() * gridColumns);
+			generateRepeatingSequence(currentRepetition);
+			randomizeAccents();
+			randomizeTempo(50, 150);
+			randomizeChord();
+			randomizeBaseVelocity(1, 64);
+			randomizeAccentStrength(1, 64);
+		}
+
+		function debugLive(msg) {
+			document.getElementById("testSpace").textContent = msg;
+		}
+
+		function reviewSequence(e) {
+			sequencer.stop();
+			updateActiveStepView(-1);
+			updateActiveAccentView(-1);
+
+			/*
+			//argument = event
+			console.log("reviewing sequence");
+			$("#myModal").modal('show');
+
+			debugLive('stopped for playing pattern ' + playCounter + 'times');
+			sequencer.stop();
+			updateActiveStepView(-1);
+			updateActiveAccentView(-1);*/
+		}
+
+		function sendXHR(pattern, tempo, rating) {
+			var data = new FormData();
+			/* half in global variables, half in arguments of method. not good */
+
+			data.append('raw_pattern', pattern);
+			data.append('tempo', tempo);
+			data.append('rating', rating);
+			data.append('repetition', currentRepetition);
+			data.append('sound', 'sine');
+			data.append('octave', currentOctave);
+			data.append('chord', currentChord);
+
+			console.log(tempo, rating, currentRepetition, currentOctave, currentChord);
+
+			var xhr = new XMLHttpRequest();
+			xhr.open('POST', 'post-url/', true);
+			xhr.setRequestHeader("X-CSRFToken", "{{ csrf_token }}");
+
+			xhr.onload = function () {
+				// do something to response
+				debugLive(this.responseText);
+				console.log(this.responseText);
+			};
+
+			xhr.send(data);
+		}
+
+		function formatPattern(pattern) {
+			var substrings = [];
+
+			for (var i = 0; i < pattern.length; i++) {
+				for (var j = 0; j < pattern[i].length; j++) {
+					substrings[i] = pattern[i].join("");
+				}
+			}
+			return substrings;
+		}
+
+		function like() {
+
+			//call as on-submit + POST? 
+
+			/* send to django:
+			/  - current pattern
+			/  - bpm
+			/  - repetitions
+			/  - chord
+			/  - octave
+			/  - sound
+			*/
+
+			$("#myModal").modal('hide');
+			debugLive("You chose 'like'. Sending reply to server...");
+			sendXHR(formatPattern(patterns), bpm, "positive");
+			//moveToNewSequence();
+		}
+
+		function dislike() {
+			$("#myModal").modal('hide');
+			debugLive("You chose 'dislike'. Sending reply to server...");
+
+			sendXHR(formatPattern(patterns), bpm, "negative");
+		}
+
+		function patternDataSavedToDB() {
+			debugLive('Your reply has been saved. A new sequence has been generated.');
+			clearGrid();
+			clearAccents();
+			moveToNewSequence();
+		}
+
+		function patternDataToArray(patternData) {
+			//expects 
+			//returns multidimensional array
+			var result = [];
+
+			return result;
+		}
+
+	</script>
+</body>
+
+</html>

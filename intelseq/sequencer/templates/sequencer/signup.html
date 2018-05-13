@@ -1,0 +1,16 @@
+{% extends 'sequencer/base.html' %}
+
+{% block javascript %}
+  <script>
+  </script>
+{% endblock %}
+
+{% block content %}
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="text" required="" name="username" maxlength="150" id="id_username" autofocus="">
+        <button type="submit">Sign up</button>
+    </form>
+
+{% endblock %}
