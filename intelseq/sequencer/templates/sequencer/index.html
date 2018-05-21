@@ -62,10 +62,16 @@
 					<li>tempo</li>
 					<input type="range" min="50" max="150" value="90" id="tempoSlider">
 
-					<li>MIDI ouptut</li>
+					<li>MIDI ouptut (melody)</li>
 					<select id="midi-dropdown-list">
-						<option>digitakt</option>
+						<option>(not loaded)</option>
 					</select>
+
+					<li>MIDI ouptut (drums)</li>
+					<select id="drums-midi-dropdown-list">
+						<option>(not loaded)</option>
+					</select>
+					
 					
 				</ul>
 			</div>
@@ -140,8 +146,40 @@
 
 	<script>
 		//initial global variables
-		var gridColumns = 8;
-		var gridRows = 4;
+		var gridColumns = 10;
+		var gridRows = 8;
+
+		var MAX_POLYPHONY = 8;
+		var MAX_SEQUENCE_LENGTH = 16;
+
+		var ROW1_CHANNEL = 14;
+		var ROW2_CHANNEL = 14;
+		var ROW3_CHANNEL = 14;
+		var ROW4_CHANNEL = 14;
+		var ROW5_CHANNEL = 14;
+		var ROW6_CHANNEL = 14;
+		var ROW7_CHANNEL = 14;
+		var ROW8_CHANNEL = 14;
+
+		var sequencerMIDIChannels = [ROW1_CHANNEL,
+									 ROW2_CHANNEL,
+									 ROW3_CHANNEL,
+									 ROW4_CHANNEL,
+									 ROW5_CHANNEL,
+									 ROW6_CHANNEL,
+									 ROW7_CHANNEL,
+									 ROW8_CHANNEL];
+
+		if(gridRows > MAX_POLYPHONY) {
+			console.log("Grid rows is set larger than maximum " + MAX_POLYPHONY + "; initialized to " + MAX_POLYPHONY);
+			gridRows = MAX_POLYPHONY;
+		}
+
+		if(gridColumns > MAX_SEQUENCE_LENGTH) { 
+			console.log("Grid columns is set larger than maximum " + MAX_SEQUENCE_LENGTH + "; initialized to " + MAX_SEQUENCE_LENGTH);
+			gridColumns = MAX_SEQUENCE_LENGTH;			
+		}
+
 		var sequencers = [];
 
 		var playCounter = 0;
@@ -151,7 +189,9 @@
 		var currentChord;
 
 		var possibleOctaves = ["C0", "C1", "C2", "C3", "C4", "C5"];
-		var currentOctave = possibleOctaves[3];
+		var MAIN_OCTAVE = possibleOctaves[1];
+
+		var SHOW_ACCENT_ROW = false;
 
 		//user-editable variables
 		var minVel = 75;
@@ -159,52 +199,11 @@
 		var maxVel = minVel + accentStrength;
 		var accents = [];
 
-
-		var midiOutput;
-		var sequencer;
-
-		WebMidi.enable(function (err) {
-			if (err) {
-				console.log("WebMidi could not be enabled.", err);
-			} else {
-				console.log("WebMidi enabled!");
-				//console.log(WebMidi.inputs[0]);
-				//console.log(WebMidi.outputs[0]);
-				
-				try{
-					midiOutput = WebMidi.outputs[0];
-					console.log("auto selected midi output:");
-					console.log(midiOutput.name);
-				} catch(err) {
-					console.log("Error - No MIDI output available");
-				}
-
-				sequencer = new Sequencer(gridColumns, gridRows, notes, velocities, bpm, midiOutput);
-
-				var outputElements = [];
-				var midiOutputHtmlElements = "";
-				console.log("Available MIDI outputs:");
-				for (let entry of WebMidi.outputs) {
-					outputElements.push(entry.name);
-					midiOutputHtmlElements += "<option value="+entry.name+">"+entry.name+"</option>";
-					console.log(entry.name);
-
-				}
-				var midiDropdownList = document.getElementById("midi-dropdown-list");
-				midiDropdownList.innerHTML = midiOutputHtmlElements;
-
-				midiDropdownList.addEventListener("input", function (e){ 
-					sequencer.midiOutput = WebMidi.getOutputByName(e.target.value);
-					console.log("selected value:"+e.target.value);
-					console.log("matching out port:");
-					console.log(WebMidi.getOutputByName(e.target.name));
-;				});
-
-
-				//var midiOutputElement = new OptionList(outputElements)
-				//console.log(midiOutput);
-			}
-		});
+		if(!SHOW_ACCENT_ROW) {
+			document.getElementById("accents").style.display = "none";
+			accentStrength = 0;
+		}
+		
 
 		for (var i = 0; i < gridColumns; i++) {
 			accents[i] = 0;
@@ -215,7 +214,7 @@
 		//patterns: 2-dimensional array, referred to as 'matrix' in this document
 		var patterns = []; //this is connected to the grid
 
-		var bpm = 90;
+		var global_bpm = 90;
 
 		var notes = [];
 
@@ -237,9 +236,64 @@
 		var noChord = [0, 1, 2, 3, 4, 5, 6];
 
 		var chordList = ["minor", "major", "pentatonic", "major9", "minor7", "whole"];
+		var midiOutput;
+		var sequencer = new Sequencer(gridColumns, gridRows, sequencerMIDIChannels, notes, velocities, global_bpm, midiOutput);
+
+		WebMidi.enable(function (err) {
+			//basic prevention of javascript injections
+			var SAFE_DEVICE_NAME_LENGTH = 100;
+			if (err) {
+				console.log("WebMidi could not be enabled.", err);
+			} else {
+				console.log("WebMidi enabled!");
+				//console.log(WebMidi.inputs[0]);
+				//console.log(WebMidi.outputs[0]);
+				
+				try{
+					midiOutput = WebMidi.outputs[0];
+					console.log("auto selected midi output:");
+					console.log(midiOutput.name);
+				} catch(err) {
+					console.log("Error - No MIDI output available");
+				}
+				sequencer.setMIDIOutput(midiOutput);
+				drumSequencer.setMIDIOutput(midiOutput);
 
 
+				var outputElements = [];
+				var midiOutputHtmlElements = "";
+				for (let entry of WebMidi.outputs) {
+					if(entry.name.length <= SAFE_DEVICE_NAME_LENGTH) { 
+						outputElements.push(entry.name);
+						midiOutputHtmlElements += "<option value="+entry.id+">"+entry.name+"</option>";
+						console.log("device added to list: "+entry.name +". Details:");
+						console.log(entry);
+					} else {
+						console.log("potentially unsafe device name:" + entry.name);
+					}
+				}
 
+				var midiDropdownList = document.getElementById("midi-dropdown-list");
+				var drumsMidiDropDownList = document.getElementById("drums-midi-dropdown-list");
+				midiDropdownList.innerHTML = midiOutputHtmlElements;
+				drumsMidiDropDownList.innerHTML = midiOutputHtmlElements;
+
+				midiDropdownList.addEventListener("input", function (e){ 
+					console.log("id:"+e.target.value);
+					sequencer.setMIDIOutput(WebMidi.getOutputById(e.target.value));
+					console.log("switched melody sequencer output to: "+WebMidi.getOutputById(e.target.value).name);
+				});
+
+				drumsMidiDropDownList.addEventListener("input", function (e){ 
+					drumSequencer.setMIDIOutput(WebMidi.getOutputById(e.target.value));
+					console.log("switched drum sequencer output to: "+WebMidi.getOutputById(e.target.value).name);
+				});
+
+
+				//var midiOutputElement = new OptionList(outputElements)
+				//console.log(midiOutput);
+			}
+		});
 		/********************\
 		 *  INITIALIZE GRID *|
 		 ********************/
@@ -310,17 +364,75 @@
 		});
 
 		document.getElementById("scale-selector").addEventListener('input', function (e) {
-			selectScale(e.target.value, "C4");
+			selectScale(e.target.value, MAIN_OCTAVE);
 		});
 
 		document.getElementById("music-app-sequencer").addEventListener('reachedMaxPlays', reviewSequence);
 
-		selectScale("minor", currentOctave);
+		selectScale("minor", MAIN_OCTAVE);
 
+
+		/********************\
+		 *  STATIC DRUMBEAT *|
+		 ********************/
+
+		var DRUM_SEQUENCER_ROWS = 3;
+		var DRUM_SEQUENCER_COLUMNS = gridColumns;
+
+		var DRUM_SEQUENCER_ROW1_CHANNEL = 6;
+		var DRUM_SEQUENCER_ROW2_CHANNEL = 2;
+		var DRUM_SEQUENCER_ROW3_CHANNEL = 1;
+		
+		var DRUM_SEQUENCER_NOTE1 = "C1";
+		var DRUM_SEQUENCER_NOTE2 = "C1";
+		var DRUM_SEQUENCER_NOTE3 = "C1";
+
+		var DRUMS_ROW1 = 0;
+		var DRUMS_ROW2 = 1;
+		var DRUMS_ROW3 = 2;
+
+		var drumSequencerMIDIChannels = [DRUM_SEQUENCER_ROW1_CHANNEL,
+										 DRUM_SEQUENCER_ROW2_CHANNEL,
+										 DRUM_SEQUENCER_ROW3_CHANNEL];
+
+		var drumSequencerNotes = [DRUM_SEQUENCER_NOTE1,
+		  						  DRUM_SEQUENCER_NOTE2,
+								  DRUM_SEQUENCER_NOTE3];
+		
+		var drumSequencerVelocities;
+		
+		var DRUM_SEQUENCER_MIDI_OUTPUT;
+
+		var drumSequencer = new Sequencer(DRUM_SEQUENCER_COLUMNS, DRUM_SEQUENCER_ROWS, drumSequencerMIDIChannels, drumSequencerNotes, velocities, global_bpm, DRUM_SEQUENCER_MIDI_OUTPUT);
+
+		var drumMatrixPrototype = [[1,1,1,1],
+						  		   [0,0,1,0],
+								   [1,0,0,0]];
+	
+		var drumMatrix = [];
+		drumMatrix[DRUMS_ROW1] = [];
+		drumMatrix[DRUMS_ROW2] = [];
+		drumMatrix[DRUMS_ROW3] = [];
+		
+		for(var i = 0; i < DRUM_SEQUENCER_COLUMNS; i++) {
+
+			drumMatrix[DRUMS_ROW1][i] = drumMatrixPrototype[DRUMS_ROW1][i % drumMatrixPrototype[DRUMS_ROW1].length];
+			drumMatrix[DRUMS_ROW2][i] = drumMatrixPrototype[DRUMS_ROW2][i % drumMatrixPrototype[DRUMS_ROW2].length];
+			drumMatrix[DRUMS_ROW3][i] = drumMatrixPrototype[DRUMS_ROW3][i % drumMatrixPrototype[DRUMS_ROW3].length];
+		}
+		
+		drumSequencer.updateMatrix(drumMatrix);
+
+		//kick > channel 1 > note C1
+		//snare > channel 2 > note C1
+		//hat > channel 6 > note C1
+						
 
 		/********************\
 		 *  FUNCTIONALITY   *|
 		 ********************/
+
+		//These should all be classes
 
 		function selectScale(scaleSelection, octave) {
 			var notes = [];
@@ -378,7 +490,7 @@
 				distributedScaleArray.push(noteName);
 				console.log(distributedScaleArray[i]);
 			}
-			return distributedScaleArray;
+			return distributedScaleArray.reverse();
 		}
 
 		function extendChordList(chordArray, scaleLength, totalItems) {
@@ -705,7 +817,7 @@
 			currentChord = result;
 
 			document.getElementById("scale-selector").value = result;
-			selectScale(result, "C3");
+			selectScale(result, MAIN_OCTAVE);
 			return result;
 		}
 
@@ -797,8 +909,9 @@
 		}
 
 		function updateTempo(newBPM) {
-			bpm = newBPM;
-			sequencer.setBPM(newBPM);
+			global_bpm = newBPM;
+			sequencer.setBPM(global_bpm);
+			drumSequencer.setBPM(global_bpm);
 		}
 
 		function patternHasChanged() {
@@ -846,10 +959,10 @@
 			data.append('rating', rating);
 			data.append('repetition', currentRepetition);
 			data.append('sound', 'sine');
-			data.append('octave', currentOctave);
+			data.append('octave', MAIN_OCTAVE);
 			data.append('chord', currentChord);
 
-			console.log(tempo, rating, currentRepetition, currentOctave, currentChord);
+			console.log(tempo, rating, currentRepetition, MAIN_OCTAVE, currentChord);
 
 			var xhr = new XMLHttpRequest();
 			xhr.open('POST', 'post-url/', true);
@@ -890,7 +1003,7 @@
 
 			$("#myModal").modal('hide');
 			debugLive("You chose 'like'. Sending reply to server...");
-			sendXHR(formatPattern(patterns), bpm, "positive");
+			sendXHR(formatPattern(patterns), global_bpm, "positive");
 			//moveToNewSequence();
 		}
 
@@ -898,7 +1011,7 @@
 			$("#myModal").modal('hide');
 			debugLive("You chose 'dislike'. Sending reply to server...");
 
-			sendXHR(formatPattern(patterns), bpm, "negative");
+			sendXHR(formatPattern(patterns), global_bpm, "negative");
 		}
 
 		function patternDataSavedToDB() {

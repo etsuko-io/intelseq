@@ -3,6 +3,7 @@ document.addEventListener('keydown', function (event) {
         if (event.code == 'KeyP') {
             debugLive('play');
             sequencer.play();
+            drumSequencer.play();
         }
         else if (event.code == 'KeyR') {
             debugLive('randomize');
@@ -11,6 +12,7 @@ document.addEventListener('keydown', function (event) {
         else if (event.code == 'KeyS') {
             debugLive('stop');
             sequencer.stop();
+            drumSequencer.stop();
             updateActiveStepView(-1);
             updateActiveAccentView(-1);
 
@@ -18,6 +20,7 @@ document.addEventListener('keydown', function (event) {
         else if (event.code == 'KeyC') {
             debugLive('clear');
             sequencer.stop();
+            drumSequencer.stop();
             clearGrid();
             clearAccents();
         }

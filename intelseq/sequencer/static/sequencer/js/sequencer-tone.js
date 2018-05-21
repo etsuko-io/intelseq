@@ -1,23 +1,25 @@
-function Sequencer(sequencerLength, numberOfVoices, notes, velocitySequence, bpm, midiOutPort) {
+function Sequencer(sequencerLength = 16, numberOfVoices = 4, MIDIChannels, notes, velocitySequence, bpm, midiOutPort) {
     //constructor variables
 
+    //numberOfVoices = polyphony = grid rows
     this.numberOfVoices = numberOfVoices;
+    this.MIDIChannels = MIDIChannels;
 
     this.bpm;
     this.timer;
     this.stepLength;
     this.setBPM(bpm);
     //using WebMidi.js 2.0.0
-    this.midiOutPort = midiOutPort;
+    console.log("selected out: " + midiOutPort);
+    if(midiOutPort != undefined && midiOutPort != null){
+        this.midiOutPort = output;
+    }
 
     this.feedbackDelay = new Tone.PingPongDelay({
         "delayTime": "8n",
         "feedback": 0.3,
         "wet": 0.0
     }).toMaster();
-
-
-
 
     this.voiceTemplate = new Tone.MembraneSynth();
 
@@ -42,7 +44,6 @@ function Sequencer(sequencerLength, numberOfVoices, notes, velocitySequence, bpm
         }
     }
 
-
     this.velocitySequence = velocitySequence;
 
     this.notes = notes;
@@ -53,6 +54,20 @@ function Sequencer(sequencerLength, numberOfVoices, notes, velocitySequence, bpm
     this.currentStep = 0;
     this.stepsElapsed = 0;
     this.paused = true;
+}
+
+Sequencer.prototype.setMIDIOutput = function(output){
+    try {
+        this.midiOutPort = output;
+        
+    } catch(err) {
+        console.log("setting midi output failed");
+        return;
+    }
+    console.log("The MIDI output of a sequencer instance has succesfully been changed into: " + output.name);
+}
+Sequencer.prototype.getMIDIOutput = function(){
+    return this.midiOutPort;
 }
 
 Sequencer.prototype.play = function () {
@@ -109,13 +124,16 @@ Sequencer.prototype.adjustStep = function (step, note, vel) {
 }
 
 Sequencer.prototype.triggerStep = function (step) {
+    //console.log('triggering step ' + step + ". voices: "+this.numberOfVoices);
 
     var notesToTrigger = [];
 
     for (var i = 0; i < this.numberOfVoices; i++) {
         //  console.log("checking for voice " + i +"; result is " + this.sequenceMatrix[i][step] == 1);
-        if (this.sequenceMatrix[i][step] == "1") {
-            notesToTrigger.push(notes[i]);
+        if (this.sequenceMatrix[i][step] == "1" || this.sequenceMatrix[i][step] == 1) {
+            //notesToTrigger.push(notes[i]);
+            this.midiOutPort.playNote(this.notes[i], this.MIDIChannels[i], {duration:250, velocity:this.velocitySequence[step]});
+            console.log("playing note " + this.notes[i]);
         }
     }
 
@@ -125,7 +143,7 @@ Sequencer.prototype.triggerStep = function (step) {
     this.polySynth.triggerAttackRelease(notesToTrigger, "16n", undefined, 0.1 + Number(this.velocitySequence[step])/127);
 
     //https://www.npmjs.com/package/webmidi
-    this.midiOutPort.playNote(notesToTrigger, 1, {duration:250, velocity:this.velocitySequence[step]});
+    //this.midiOutPort.playNote(notesToTrigger, this.channel, {duration:250, velocity:this.velocitySequence[step]});
 
 }
 
