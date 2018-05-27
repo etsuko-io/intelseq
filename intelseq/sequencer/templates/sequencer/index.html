@@ -45,18 +45,16 @@
 			<div class="variables">
 				<h5>Variables:</h5>
 				<ul>
+					<!--
 					<li>Base velocity</li>
 					<input type="range" min="1" max="64" value="20" id="velocityRangeSlider">
 					<li>accent intensity</li>
 					<input type="range" min="0" max="63" value="50" id="accentSlider">
+					-->
 					<li>chord</li>
 					<select class="scale-selector" id="scale-selector">
-						<option value="minor">minor</option>
-						<option value="major">major</option>
-						<option value="pentatonic">pentatonic</option>
-						<option value="major9">major9</option>
-						<option value="minor7">minor7</option>
-						<option value="whole">whole</option>
+						<option value="SAD">SAD</option>
+						<option value="HAPPY">HAPPY</option>
 					</select>
 
 					<li>tempo</li>
@@ -69,6 +67,11 @@
 
 					<li>MIDI ouptut (drums)</li>
 					<select id="drums-midi-dropdown-list">
+						<option>(not loaded)</option>
+					</select>
+
+					<li>MIDI ouptut (bass)</li>
+					<select id="bass-midi-dropdown-list">
 						<option>(not loaded)</option>
 					</select>
 					
@@ -146,11 +149,13 @@
 
 	<script>
 		//initial global variables
-		var gridColumns = 10;
-		var gridRows = 8;
+		var gridColumns = 8;
+		var gridRows = 5;
 
 		var MAX_POLYPHONY = 8;
 		var MAX_SEQUENCE_LENGTH = 16;
+		
+		var MONO_MELODIES_ONLY = true;
 
 		var ROW1_CHANNEL = 14;
 		var ROW2_CHANNEL = 14;
@@ -189,7 +194,7 @@
 		var currentChord;
 
 		var possibleOctaves = ["C0", "C1", "C2", "C3", "C4", "C5"];
-		var MAIN_OCTAVE = possibleOctaves[1];
+		var MAIN_OCTAVE = possibleOctaves[3];
 
 		var SHOW_ACCENT_ROW = false;
 
@@ -225,6 +230,10 @@
 		var phrygian = [0, 1, 3, 5, 7, 8, 10];
 		var lydian = [0, 2, 4, 6, 7, 9, 11];
 		var mixolydian = [0, 2, 4, 5, 7, 9, 10];
+		
+		var sad_scale = [0,3,7];
+		var happy_scale = [0,4,7];
+		var asian_scale = [0,2,4,7,9];
 
 		var major9 = [0, 2, 4, 7, 11];
 		var minor7 = [0, 3, 7, 10];
@@ -235,9 +244,15 @@
 		var thirdChord = [2, 4, 6];
 		var noChord = [0, 1, 2, 3, 4, 5, 6];
 
-		var chordList = ["minor", "major", "pentatonic", "major9", "minor7", "whole"];
+		var chordList = ["SAD", "HAPPY"];
+		//CHORDLIST WAS: ["minor", "major", "pentatonic", "major9", "minor7", "whole"];
+		// SAD | HAPPY 
 		var midiOutput;
 		var sequencer = new Sequencer(gridColumns, gridRows, sequencerMIDIChannels, notes, velocities, global_bpm, midiOutput);
+		
+		var MELODY_DEFAULT_MIDI_PORT = "to Max 1";
+		var DRUMS_DEFAULT_MIDI_PORT = "to Max 2";
+		var BASS_DEFAULT_MIDI_PORT = "to Max 2";
 
 		WebMidi.enable(function (err) {
 			//basic prevention of javascript injections
@@ -254,11 +269,12 @@
 					console.log("auto selected midi output:");
 					console.log(midiOutput.name);
 				} catch(err) {
-					console.log("Error - No MIDI output available");
+					console.log("Error - MIDI output available");
 				}
-				sequencer.setMIDIOutput(midiOutput);
-				drumSequencer.setMIDIOutput(midiOutput);
 
+				sequencer.setMIDIOutput(WebMidi.getOutputByName(MELODY_DEFAULT_MIDI_PORT));
+				drumSequencer.setMIDIOutput(WebMidi.getOutputByName(DRUMS_DEFAULT_MIDI_PORT));
+				bassSequencer.setMIDIOutput(WebMidi.getOutputByName(BASS_DEFAULT_MIDI_PORT));
 
 				var outputElements = [];
 				var midiOutputHtmlElements = "";
@@ -275,9 +291,16 @@
 
 				var midiDropdownList = document.getElementById("midi-dropdown-list");
 				var drumsMidiDropDownList = document.getElementById("drums-midi-dropdown-list");
+				var bassMidiDropDownList = document.getElementById("bass-midi-dropdown-list");
+
 				midiDropdownList.innerHTML = midiOutputHtmlElements;
 				drumsMidiDropDownList.innerHTML = midiOutputHtmlElements;
+				bassMidiDropDownList.innerHTML = midiOutputHtmlElements;
 
+				midiDropdownList.value = WebMidi.getOutputByName(MELODY_DEFAULT_MIDI_PORT).id;
+				drumsMidiDropDownList.value = WebMidi.getOutputByName(DRUMS_DEFAULT_MIDI_PORT).id;
+				bassMidiDropDownList.value = WebMidi.getOutputByName(BASS_DEFAULT_MIDI_PORT).id;
+				
 				midiDropdownList.addEventListener("input", function (e){ 
 					console.log("id:"+e.target.value);
 					sequencer.setMIDIOutput(WebMidi.getOutputById(e.target.value));
@@ -327,6 +350,7 @@
 		}
 
 		//creates sequencers
+		/*
 		document.getElementById("velocityRangeSlider").addEventListener('input', function (event) {
 			updateBaseVelocity(parseInt(event.target.value));
 			debugLive("velocity: " + event.target.value);
@@ -335,7 +359,7 @@
 		document.getElementById("accentSlider").addEventListener('input', function (event) {
 			updateAccentStrength(parseInt(event.target.value));
 			debugLive("accent: +" + event.target.value);
-		});
+		});*/
 
 		document.getElementById("tempoSlider").addEventListener('input', function (event) {
 			updateTempo(event.target.value);
@@ -369,7 +393,7 @@
 
 		document.getElementById("music-app-sequencer").addEventListener('reachedMaxPlays', reviewSequence);
 
-		selectScale("minor", MAIN_OCTAVE);
+		selectScale("SAD", MAIN_OCTAVE);
 
 
 		/********************\
@@ -405,28 +429,91 @@
 
 		var drumSequencer = new Sequencer(DRUM_SEQUENCER_COLUMNS, DRUM_SEQUENCER_ROWS, drumSequencerMIDIChannels, drumSequencerNotes, velocities, global_bpm, DRUM_SEQUENCER_MIDI_OUTPUT);
 
-		var drumMatrixPrototype = [[1,1,1,1],
-						  		   [0,0,1,0],
-								   [1,0,0,0]];
-	
-		var drumMatrix = [];
-		drumMatrix[DRUMS_ROW1] = [];
-		drumMatrix[DRUMS_ROW2] = [];
-		drumMatrix[DRUMS_ROW3] = [];
-		
-		for(var i = 0; i < DRUM_SEQUENCER_COLUMNS; i++) {
+		var drumMatrixPrototype; 
 
-			drumMatrix[DRUMS_ROW1][i] = drumMatrixPrototype[DRUMS_ROW1][i % drumMatrixPrototype[DRUMS_ROW1].length];
-			drumMatrix[DRUMS_ROW2][i] = drumMatrixPrototype[DRUMS_ROW2][i % drumMatrixPrototype[DRUMS_ROW2].length];
-			drumMatrix[DRUMS_ROW3][i] = drumMatrixPrototype[DRUMS_ROW3][i % drumMatrixPrototype[DRUMS_ROW3].length];
-		}
+		var drumMatrixPrototype1 = [[1,1,1,1],
+						  		    [0,0,1,0],
+								    [1,0,0,0]];
+	
+		var drumMatrixPrototype2 = [[1,1,1,1],
+						  		    [0,0,1,0],
+								    [1,0,0,0,0,1,0,0]];
+
+		var drumMatrixPrototype3 = [[1,0],
+									[0,0,1,0],
+									[1,0,0,0,0,1,0,0]];
 		
-		drumSequencer.updateMatrix(drumMatrix);
+		var drumMatrixPrototype4 = [[1,0],
+									[0,0,1,0,0,0,1,0],
+									[1,0,0]];
+		
+		var drumMatrixPrototype5 = [[0,1,0,1,0,1,1,1],
+									[0,0,0,0,1,0,0,0],
+									[1,0,1,0,0,0,0,0]];
+		
+		var drumMatrixPrototypes = [drumMatrixPrototype1,drumMatrixPrototype2,drumMatrixPrototype3,drumMatrixPrototype4,drumMatrixPrototype5];
+		
+		randomizeDrumBeat(drumMatrixPrototypes);
+
+		function updateDrumBeat(){
+			var drumMatrix = [];
+			drumMatrix[DRUMS_ROW1] = [];
+			drumMatrix[DRUMS_ROW2] = [];
+			drumMatrix[DRUMS_ROW3] = [];
+			
+			for(var i = 0; i < DRUM_SEQUENCER_COLUMNS; i++) {
+				drumMatrix[DRUMS_ROW1][i] = drumMatrixPrototype[DRUMS_ROW1][i % drumMatrixPrototype[DRUMS_ROW1].length];
+				drumMatrix[DRUMS_ROW2][i] = drumMatrixPrototype[DRUMS_ROW2][i % drumMatrixPrototype[DRUMS_ROW2].length];
+				drumMatrix[DRUMS_ROW3][i] = drumMatrixPrototype[DRUMS_ROW3][i % drumMatrixPrototype[DRUMS_ROW3].length];
+			}
+			
+			drumSequencer.updateMatrix(drumMatrix);
+		}
 
 		//kick > channel 1 > note C1
 		//snare > channel 2 > note C1
 		//hat > channel 6 > note C1
 						
+
+		/********************\
+		 *  STATIC BASSLINE *|
+		 ********************/
+
+		var BASS_MIDI_CHANNELS = [8];
+		var BASS_SEQUENCER_COLUMNS = gridColumns;
+		var BASS_SEQUENCER_ROWS = 1;
+		var BASS_SEQUENCER_MIDI_OUTPUT;
+
+		var BASS_ROW1 = 0;
+		
+		var bassNote = "C1";
+		var bassSequencerNotes = [bassNote];
+		var bassSequencer = new Sequencer(BASS_SEQUENCER_COLUMNS, BASS_SEQUENCER_ROWS, BASS_MIDI_CHANNELS, bassSequencerNotes, velocities, global_bpm, BASS_SEQUENCER_MIDI_OUTPUT);
+		
+		
+		var bassPatternPrototype;
+		
+		var bassPatternPrototype1 = [[1,0,0,0,0,0,0,0]];
+		var bassPatternPrototype2 = [[1,0,0,0]];
+		var bassPatternPrototype3 = [[1,0,0,0,1,0,1,0]];
+		var bassPatternPrototype4 = [[1,0,0,0,0,0,1,0]];
+		var bassPatternPrototype5 = [[0,0,1,0,0,1,0,0]];
+
+		var bassPatternPrototypes = [bassPatternPrototype1, bassPatternPrototype2, bassPatternPrototype3, bassPatternPrototype4, bassPatternPrototype5];
+
+		randomizeBassPattern(bassPatternPrototypes);
+
+		function updateBassPattern(){
+			var bassMatrix = [];
+			bassMatrix[BASS_ROW1] = [];
+
+			for(var i = 0; i < BASS_SEQUENCER_COLUMNS; i++) {
+				bassMatrix[BASS_ROW1][i] = bassPatternPrototype[BASS_ROW1][i % bassPatternPrototype[BASS_ROW1].length];
+			}
+			console.log("bass pattern:" + bassMatrix);
+			bassSequencer.updateMatrix(bassMatrix);
+		}
+
 
 		/********************\
 		 *  FUNCTIONALITY   *|
@@ -463,6 +550,18 @@
 					break;
 				case "whole":
 					notes = distributeChord(whole, noChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "SAD":
+					notes = distributeChord(sad_scale, noChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "HAPPY":
+					notes = distributeChord(happy_scale, noChord, octaveAsNoteNumber, gridRows);
+					updateChord(notes);
+					break;
+				case "ASIAN":
+					notes = distributeChord(asian_scale, noChord, octaveAsNoteNumber, gridRows);
 					updateChord(notes);
 					break;
 				default:
@@ -696,12 +795,14 @@
 
 		function randomizeGrid() {
 			var totalTiles = gridRows * gridColumns;
-
+			
+			//2 tiles + (maximum 1/4 of the total tiles)
 			var numTilesToActivate = Math.floor(2 + (Math.random() * (totalTiles / 4)));
 			console.log("tiles to be randomized: " + numTilesToActivate);
 
 			var randomSequence = [];
-
+			
+			//create an array wherein the first n elements are 1, the rest 0
 			for (var i = 0; i < totalTiles; i++) {
 				if (i < numTilesToActivate) {
 					randomSequence[i] = 1;
@@ -709,8 +810,11 @@
 					randomSequence[i] = 0;
 				}
 			}
+			//randomize the array
 			shuffle(randomSequence);
 			var k = 0;
+			var skip = false;
+			//apply the randomized array to the grid
 			for (var i = 0; i < gridRows; i++) {
 				for (var j = 0; j < gridColumns; j++) {
 					setButtonValue(i, j, randomSequence[k]);
@@ -719,7 +823,40 @@
 			}
 		}
 
+		function generateMonoRepeatingSequence(repAmount){
+			console.log('generating monophonic repeating sequence');
+			var numTilesToActivate = gridColumns - (Math.floor(Math.random() * gridColumns/2));
+			console.log("activating " + numTilesToActivate + " tiles");
+			var rowIndexesToActivate = [];
+			
+			for(var i = 0; i < gridColumns; i++) {
+				if(i < numTilesToActivate) { 
+					rowIndexesToActivate.push(Math.floor(Math.random() * gridRows));
+				} else { 
+					rowIndexesToActivate.push(null);
+				}
+			}
+			shuffle(rowIndexesToActivate);
+			console.log(rowIndexesToActivate);
+
+			//empty array
+			for (var i = 0; i < gridRows; i++) {
+				for (var j = 0; j < gridColumns; j++) {
+					setButtonValue(i, j, 0);
+				}
+			}
+
+			for(var i = 0; i < gridColumns; i++) {
+				if(rowIndexesToActivate[i] != null) {
+					setButtonValue(rowIndexesToActivate[i], i, 1);
+				}
+			}
+			//apply the randomized array to the grid
+
+		}
+
 		function generateRepeatingSequence(repAmount) {
+			console.log('generating repeating sequence');
 			var totalTiles = gridRows * repAmount;
 
 			var numTilesToActivate = Math.floor(1 + (Math.random() * (totalTiles / 2)));
@@ -738,6 +875,7 @@
 			var randomSequenceAs2DArray = [];
 			var k = 0;
 
+			//convert the randomized 1D array to a 'grid-style' 2D array
 			for (var i = 0; i < gridRows; i++) {
 				randomSequenceAs2DArray[i] = [];
 				for (var j = 0; j < repAmount; j++) {
@@ -855,7 +993,7 @@
 
 		function updateActiveStepView(currentStep) {
 			//set tiles according to patterns array
-			console.log("current step: " + currentStep);
+			//console.log("current step: " + currentStep);
 			for (var i = 0; i < gridRows; i++) {
 				for (var j = 0; j < gridColumns; j++) {
 					//inactive current step
@@ -912,6 +1050,7 @@
 			global_bpm = newBPM;
 			sequencer.setBPM(global_bpm);
 			drumSequencer.setBPM(global_bpm);
+			bassSequencer.setBPM(global_bpm);
 		}
 
 		function patternHasChanged() {
@@ -919,15 +1058,25 @@
 			//this also means that updateMatrix() has to be the only way a pattern can change
 		}
 
+		function randomizeDrumBeat(patterns){
+			drumMatrixPrototype = patterns[Math.floor(Math.random()*patterns.length)];
+			updateDrumBeat();
+		}
+		function randomizeBassPattern(patterns){
+			bassPatternPrototype = patterns[Math.floor(Math.random()*patterns.length)];
+			updateBassPattern();
+		}
 		function moveToNewSequence() {
-			randomizeGrid();
+			//randomizeGrid();
 			currentRepetition = Math.ceil(Math.random() * gridColumns);
-			generateRepeatingSequence(currentRepetition);
+			generateMonoRepeatingSequence(currentRepetition);
+			randomizeDrumBeat(drumMatrixPrototypes);
+			randomizeBassPattern(bassPatternPrototypes);
 			randomizeAccents();
 			randomizeTempo(50, 150);
 			randomizeChord();
-			randomizeBaseVelocity(1, 64);
-			randomizeAccentStrength(1, 64);
+			//randomizeBaseVelocity(1, 64);
+			//randomizeAccentStrength(1, 64);
 		}
 
 		function debugLive(msg) {

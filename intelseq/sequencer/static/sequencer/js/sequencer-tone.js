@@ -66,6 +66,7 @@ Sequencer.prototype.setMIDIOutput = function(output){
     }
     console.log("The MIDI output of a sequencer instance has succesfully been changed into: " + output.name);
 }
+
 Sequencer.prototype.getMIDIOutput = function(){
     return this.midiOutPort;
 }
@@ -93,7 +94,7 @@ Sequencer.prototype.play = function () {
 
 Sequencer.prototype.callBack = function(currentSequencer) {
     currentSequencer.triggerStep(currentSequencer.currentStep);
-    console.log("callback calls event");
+    //console.log("callback calls event");
     currentSequencer.advanceStep();
     currentSequencer.timer = setTimeout(function(){
         currentSequencer.callBack(currentSequencer);
@@ -133,14 +134,15 @@ Sequencer.prototype.triggerStep = function (step) {
         if (this.sequenceMatrix[i][step] == "1" || this.sequenceMatrix[i][step] == 1) {
             //notesToTrigger.push(notes[i]);
             this.midiOutPort.playNote(this.notes[i], this.MIDIChannels[i], {duration:250, velocity:this.velocitySequence[step]});
-            console.log("playing note " + this.notes[i]);
+            //console.log("playing note " + this.notes[i]);
         }
     }
 
     this.event = new CustomEvent('stepChange', { detail: step});
     document.getElementById("music-app-sequencer").dispatchEvent(this.event);
 
-    this.polySynth.triggerAttackRelease(notesToTrigger, "16n", undefined, 0.1 + Number(this.velocitySequence[step])/127);
+    //COMMENTING OUT THE INTERNAL SOUND SOURCE FOR NOW
+    //this.polySynth.triggerAttackRelease(notesToTrigger, "16n", undefined, 0.1 + Number(this.velocitySequence[step])/127);
 
     //https://www.npmjs.com/package/webmidi
     //this.midiOutPort.playNote(notesToTrigger, this.channel, {duration:250, velocity:this.velocitySequence[step]});
