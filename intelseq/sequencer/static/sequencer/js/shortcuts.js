@@ -5,6 +5,7 @@ document.addEventListener('keydown', function (event) {
             sequencer.play();
             drumSequencer.play();
             bassSequencer.play();
+            //clockSequencer.play();
         }
         else if (event.code == 'KeyR') {
             debugLive('randomize');
@@ -15,6 +16,7 @@ document.addEventListener('keydown', function (event) {
             sequencer.stop();
             drumSequencer.stop();
             bassSequencer.stop();
+            //clockSequencer.stop();
             updateActiveStepView(-1);
             updateActiveAccentView(-1);
 
@@ -23,6 +25,8 @@ document.addEventListener('keydown', function (event) {
             debugLive('clear');
             sequencer.stop();
             drumSequencer.stop();
+            bassSequencer.stop();
+            //clockSequencer.stop();
             clearGrid();
             clearAccents();
         }

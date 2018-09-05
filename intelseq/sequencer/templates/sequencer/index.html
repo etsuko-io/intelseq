@@ -19,7 +19,7 @@
 
 
 	<div class="jumbotron text-left">
-		<h1>Intelligent Music Sequencer</h1>
+		<h1>IntelSeq</h1>
 		<div id="description">
 			<p>
 				<h4>This app allows you to generate short loops of music. Instructions:</h4>
@@ -89,10 +89,11 @@
 				<div class="btn-group-sm">
 					<button type="button" class="btn btn-primary" id="clearAllButton">clear all</button>
 					<button type="button" class="btn btn-primary" id="randomizeButton">randomize</button>
+					<!--
 					<button type="button" class="btn btn-success" onclick="like()">Great!</button>
 					<button type="button" class="btn btn-warning" onclick="">Mwah</button>
 					<button type="button" class="btn btn-danger" onclick="dislike()">Nope.</button>
-
+					-->
 				</div>
 			</div>
 			<div class="debug" id="testSpace"></div>
@@ -157,14 +158,14 @@
 		
 		var MONO_MELODIES_ONLY = true;
 
-		var ROW1_CHANNEL = 14;
-		var ROW2_CHANNEL = 14;
-		var ROW3_CHANNEL = 14;
-		var ROW4_CHANNEL = 14;
-		var ROW5_CHANNEL = 14;
-		var ROW6_CHANNEL = 14;
-		var ROW7_CHANNEL = 14;
-		var ROW8_CHANNEL = 14;
+		var ROW1_CHANNEL = 1;
+		var ROW2_CHANNEL = 1;
+		var ROW3_CHANNEL = 1;
+		var ROW4_CHANNEL = 1;
+		var ROW5_CHANNEL = 1;
+		var ROW6_CHANNEL = 1;
+		var ROW7_CHANNEL = 1;
+		var ROW8_CHANNEL = 1;
 
 		var sequencerMIDIChannels = [ROW1_CHANNEL,
 									 ROW2_CHANNEL,
@@ -194,7 +195,7 @@
 		var currentChord;
 
 		var possibleOctaves = ["C0", "C1", "C2", "C3", "C4", "C5"];
-		var MAIN_OCTAVE = possibleOctaves[3];
+		var MAIN_OCTAVE = possibleOctaves[2];
 
 		var SHOW_ACCENT_ROW = false;
 
@@ -275,6 +276,7 @@
 				sequencer.setMIDIOutput(WebMidi.getOutputByName(MELODY_DEFAULT_MIDI_PORT));
 				drumSequencer.setMIDIOutput(WebMidi.getOutputByName(DRUMS_DEFAULT_MIDI_PORT));
 				bassSequencer.setMIDIOutput(WebMidi.getOutputByName(BASS_DEFAULT_MIDI_PORT));
+				clockSequencer.setMIDIOutput(WebMidi.getOutputByName(DRUMS_DEFAULT_MIDI_PORT));
 
 				var outputElements = [];
 				var midiOutputHtmlElements = "";
@@ -313,6 +315,10 @@
 				});
 
 
+				bassMidiDropDownList.addEventListener("input", function (e){ 
+					bassSequencer.setMIDIOutput(WebMidi.getOutputById(e.target.value));
+					console.log("switched bass sequencer output to: "+WebMidi.getOutputById(e.target.value).name);
+				});
 				//var midiOutputElement = new OptionList(outputElements)
 				//console.log(midiOutput);
 			}
@@ -472,14 +478,14 @@
 
 		//kick > channel 1 > note C1
 		//snare > channel 2 > note C1
-		//hat > channel 6 > note C1
-						
+		//hat > channel 6 > note C1§
+
 
 		/********************\
 		 *  STATIC BASSLINE *|
 		 ********************/
 
-		var BASS_MIDI_CHANNELS = [8];
+		var BASS_MIDI_CHANNELS = [3];
 		var BASS_SEQUENCER_COLUMNS = gridColumns;
 		var BASS_SEQUENCER_ROWS = 1;
 		var BASS_SEQUENCER_MIDI_OUTPUT;
@@ -514,6 +520,35 @@
 			bassSequencer.updateMatrix(bassMatrix);
 		}
 
+		/********************\
+		 *  CLOCK			 *|
+		 ********************/
+
+		var CLOCK_MIDI_CHANNELS = DRUM_SEQUENCER_ROW1_CHANNEL;
+		var CLOCK_SEQUENCER_COLUMNS = gridColumns;
+		var CLOCK_SEQUENCER_ROWS = 1;
+		var CLOCK_SEQUENCER_MIDI_OUTPUT;
+
+		var CLOCK_ROW1 = 0;
+		
+		var clockNote = "F1";
+		var clockSequencerNotes = [clockNote];
+		var clockSequencer = new Sequencer(CLOCK_SEQUENCER_COLUMNS, CLOCK_SEQUENCER_ROWS, CLOCK_MIDI_CHANNELS, clockSequencerNotes, velocities, global_bpm, CLOCK_SEQUENCER_MIDI_OUTPUT);
+		
+		var clockPatternPrototype = [[1]];
+		var clockPatternPrototypes = [clockPatternPrototype];
+
+		function updateClockPattern(){
+			var clockMatrix = [];
+			clockMatrix[CLOCK_ROW1] = [];
+
+			for(var i = 0; i < CLOCK_SEQUENCER_COLUMNS; i++) {
+				clockMatrix[CLOCK_ROW1][i] = clockPatternPrototype[CLOCK_ROW1][i % clockPatternPrototype[CLOCK_ROW1].length];
+			}
+			console.log("clock pattern:" + clockMatrix);
+			clockSequencer.updateMatrix(clockMatrix);
+		}
+		updateClockPattern();
 
 		/********************\
 		 *  FUNCTIONALITY   *|

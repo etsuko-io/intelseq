@@ -133,7 +133,7 @@ Sequencer.prototype.triggerStep = function (step) {
         //  console.log("checking for voice " + i +"; result is " + this.sequenceMatrix[i][step] == 1);
         if (this.sequenceMatrix[i][step] == "1" || this.sequenceMatrix[i][step] == 1) {
             //notesToTrigger.push(notes[i]);
-            this.midiOutPort.playNote(this.notes[i], this.MIDIChannels[i], {duration:250, velocity:this.velocitySequence[step]});
+            this.midiOutPort.playNote(this.notes[i], this.MIDIChannels[i], {duration:25, velocity:this.velocitySequence[step]});
             //console.log("playing note " + this.notes[i]);
         }
     }
